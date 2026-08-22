@@ -31,7 +31,7 @@ ApexOS simulates a kernel, persistent filesystem, process scheduler, and a full 
 
 ```bash
 # Clone
-git clone https://github.com/YOUR_USERNAME/ApexOS.git
+git clone https://github.com/apex_shift/ApexOS.git
 cd ApexOS
 
 # Install
