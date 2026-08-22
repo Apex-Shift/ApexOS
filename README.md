@@ -1,4 +1,5 @@
 # ApexOS
+<img width="1358" height="606" alt="apex os" src="https://github.com/user-attachments/assets/b473cdde-bc50-4bc5-b41d-32b8e557bd6c" />
 
 **A virtual operating system streamed entirely in your browser.**
 
