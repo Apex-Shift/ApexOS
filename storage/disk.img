@@ -1,0 +1,40 @@
+{
+    "metadata": {
+        "label": "APEXOS_DISK",
+        "block_size": 512,
+        "total_blocks": 2048,
+        "used_blocks": 4
+    },
+    "files": {
+        "/": {
+            "type": "dir",
+            "content": ["bin", "home", "root", "readme.txt"],
+            "owner": "root"
+        },
+        "/readme.txt": {
+            "type": "file",
+            "content": "Welcome to ApexOS!\nA virtual operating system streamed in your browser.",
+            "owner": "root"
+        },
+        "/bin": {
+            "type": "dir",
+            "content": ["matrix", "sysinfo", "ps"],
+            "owner": "root"
+        },
+        "/home": {
+            "type": "dir",
+            "content": [],
+            "owner": "root"
+        },
+        "/root": {
+            "type": "dir",
+            "content": [".bashrc"],
+            "owner": "root"
+        },
+        "/root/.bashrc": {
+            "type": "file",
+            "content": "alias ll='ls -la'\nexport PATH=/bin",
+            "owner": "root"
+        }
+    }
+}

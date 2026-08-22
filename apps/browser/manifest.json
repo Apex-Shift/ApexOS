@@ -1,0 +1,9 @@
+{
+  "id": "browser",
+  "name": "Browser",
+  "icon": "🌐",
+  "version": "1.0.0",
+  "window": { "width": 800, "height": 520 },
+  "desktop": true,
+  "entry": "app.js"
+}
