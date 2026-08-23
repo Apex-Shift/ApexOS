@@ -1,9 +1,1 @@
-{
-  "id": "text_editor",
-  "name": "Text Editor",
-  "icon": "📝",
-  "version": "1.0.0",
-  "window": { "width": 640, "height": 480 },
-  "desktop": true,
-  "entry": "app.js"
-}
+{"id":"text_editor","name":"Text Editor","icon":"📝","version":"1.0.0","desktop":true}

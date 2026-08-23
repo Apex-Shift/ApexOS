@@ -1,0 +1,10 @@
+{
+  "name": "Hello World",
+  "id": "com.apex.helloworld",
+  "version": "1.0.0",
+  "author": "ApexOS",
+  "permissions": [
+    "hardware.network.read"
+  ],
+  "entry": "index.js"
+}

@@ -1,9 +1,6 @@
-# ApexOS
-<img width="1358" height="606" alt="apex os" src="https://github.com/user-attachments/assets/b473cdde-bc50-4bc5-b41d-32b8e557bd6c" />
+# ApexOS Hybrid Edition
 
-**A virtual operating system streamed entirely in your browser.**
-
-ApexOS simulates a kernel, persistent filesystem, process scheduler, and a full desktop GUI — all built with Python, FastAPI, WebSocket, and vanilla HTML/JS.
+**A virtual operating system in the browser** — desktop GUI, terminal, packages, and real hardware access via Web APIs.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.10+-green.svg)
@@ -12,145 +9,135 @@ ApexOS simulates a kernel, persistent filesystem, process scheduler, and a full 
 
 ## Features
 
-| Component | Description |
-|-----------|-------------|
-| **Desktop GUI** | Window manager, taskbar, start menu, desktop icons |
-| **Terminal** | Full shell with command history |
-| **File Explorer** | Browse, create, delete files & folders |
-| **Text Editor** | Open / edit / save files |
-| **Calculator** | Classic calculator app |
-| **Web Browser** | Browse the internet inside ApexOS |
-| **Kernel** | Async syscalls, sessions, RBAC auth |
-| **VFS** | Persistent virtual filesystem (`storage/disk.img`) |
-| **Scheduler** | Virtual process spawn / kill / ps |
-| **Addon system** | Drop apps into the `apps/` folder |
+| Area | Capabilities |
+|------|----------------|
+| **Desktop** | Window manager, taskbar, start menu, icons |
+| **Terminal** | Full shell + `apx`, `lsusb`, `bluetooth`, `network` |
+| **Files** | Persistent VFS (`storage/disk.img`) |
+| **Settings** | Network status, Web Bluetooth, WebUSB, permission registry |
+| **Packages** | `.apx` install with Android-style permission gatekeeper |
+| **Apps** | Calculator, text editor, browser, system info |
+| **Security** | Login (RBAC), per-app permission grants in `/system/etc/permissions.json` |
 
 ---
 
-## Quick Start
+## Quick start
 
 ```bash
-# Clone
-git clone https://github.com/apex_shift/ApexOS.git
+git clone https://github.com/YOUR_USERNAME/ApexOS.git
 cd ApexOS
-
-# Install
 python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-
-# Run
 python run.py
 ```
 
 Open **http://127.0.0.1:8000**
 
-### Default credentials
-
-| User  | Password |
-|-------|----------|
-| root  | password |
-| guest | guest    |
+| User | Password |
+|------|----------|
+| root | password |
+| guest | guest |
 
 ---
 
-## Shell Commands
+## Hybrid architecture (Web APIs)
 
+ApexOS bridges the virtual desktop to the **host browser**:
+
+- **Network** — `navigator.connection` / `navigator.onLine` (Settings → Network, `network` CLI)
+- **Bluetooth** — `navigator.bluetooth` (Settings → Bluetooth, `bluetooth scan`)
+- **USB** — `navigator.usb` (Settings → USB, `lsusb`)
+
+Hardware calls are user-gated by the browser. Chrome/Edge on localhost or HTTPS work best.
+
+---
+
+## `.apx` package format
+
+An `.apx` file is a **ZIP** archive:
+
+```text
+my-app.apx
+├── manifest.json
+├── index.js
+└── (optional assets)
 ```
-login [user] [pass]     Authenticate
-whoami / pwd / date     Session info
-sysinfo                 System information
-ls / cd / cat           Navigate & read
-write / touch / mkdir   Create & write
-rm                      Delete
-echo / ps / kill        Utilities
-matrix                  Fun daemon
-clear                   Clear terminal
-help                    List commands
+
+### manifest.json
+
+```json
+{
+  "name": "Hello World",
+  "id": "com.apex.helloworld",
+  "version": "1.0.0",
+  "author": "ApexOS",
+  "permissions": ["hardware.network.read", "hardware.usb.read"],
+  "entry": "index.js"
+}
+```
+
+### Install
+
+1. Open **Packages** on the desktop  
+2. Select a `.apx` / `.zip` file  
+3. Confirm permissions in the gatekeeper dialog  
+
+CLI:
+
+```text
+apx list
+apx remove com.apex.helloworld
+perms
+```
+
+Sample package: `packages/hello-world.apx`
+
+Permissions are stored in the VFS at `/system/etc/permissions.json`.
+
+---
+
+## Shell commands
+
+```text
+login / whoami / pwd / date / sysinfo
+ls  cd  cat  write  touch  mkdir  rm
+echo  ps  kill  matrix  clear
+apx list | apx remove <id>
+perms
+lsusb
+bluetooth scan
+network
+help
 ```
 
 ---
 
-## Project Structure
+## Project layout
 
-```
+```text
 ApexOS/
-├── apps/                  # Addon applications
-│   ├── calculator/
-│   ├── text_editor/
-│   └── sysinfo/
+├── apps/                 # Built-in app manifests
+├── packages/             # Sample .apx packages
 ├── src/
-│   ├── api/               # FastAPI server + desktop frontend
-│   ├── auth/              # Authentication (RBAC)
-│   ├── core/              # Kernel + process scheduler
-│   └── filesystem/        # Virtual filesystem (VFS)
-├── storage/
-│   └── disk.img           # Persistent disk image (JSON)
-├── config/                # Config stubs
-├── tests/                 # Tests (stubs)
-├── run.py                 # Easy launcher
+│   ├── api/              # FastAPI + desktop frontend
+│   ├── auth/             # Authentication
+│   ├── core/             # Kernel, scheduler, apx engine
+│   └── filesystem/       # VFS
+├── storage/disk.img      # Persistent disk (created at runtime)
+├── run.py
 ├── requirements.txt
-├── LICENSE
 └── README.md
 ```
 
 ---
 
-## Adding Apps (Addons)
+## Roadmap implemented
 
-Apps live in the `apps/` directory. Each app is a folder with a `manifest.json`:
-
-```
-apps/
-└── my_app/
-    ├── manifest.json
-    └── app.js
-```
-
-**manifest.json example:**
-
-```json
-{
-  "id": "my_app",
-  "name": "My App",
-  "icon": "🚀",
-  "version": "1.0.0",
-  "window": { "width": 500, "height": 400 },
-  "desktop": true,
-  "entry": "app.js"
-}
-```
-
-The server exposes discovered apps at `GET /api/apps` and serves static files under `/apps/`.
-
-Built-in apps (Terminal, Files, Browser, Calculator, Editor, System) are currently embedded in the desktop for stability. The addon pipeline is ready for extension.
-
----
-
-## Architecture
-
-```
-Browser (Desktop GUI)
-    │  WebSocket
-    ▼
-FastAPI Server  ──►  ApexKernel
-                        ├── Auth (RBAC)
-                        ├── Scheduler (async processes)
-                        └── VFS (persistent JSON disk)
-```
-
-- **Frontend**: Pure HTML/CSS/JS window manager
-- **Transport**: WebSocket JSON messages (syscalls + file writes)
-- **Backend**: Python asyncio kernel with session tokens
-
----
-
-## Tech Stack
-
-- **Python 3.10+**
-- **FastAPI** + **Uvicorn**
-- **WebSockets**
-- Vanilla JS (no framework)
+- [x] Phase 1 — Network / Bluetooth / USB control panels + CLI  
+- [x] Phase 2 — `.apx` package format + install API + gatekeeper UI  
+- [x] Phase 3 — Permission registry + grant API  
+- [x] Phase 4 — `apx`, `lsusb`, `bluetooth scan`, `network` commands  
 
 ---
 
@@ -158,6 +145,4 @@ FastAPI Server  ──►  ApexKernel
 
 MIT — see [LICENSE](LICENSE).
 
----
-
-Built with ❤️ in Python.
+Web Bluetooth / WebUSB behavior depends on the browser vendor. Use HTTPS or `localhost` for full API access.

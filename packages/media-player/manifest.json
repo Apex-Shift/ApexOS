@@ -1,0 +1,17 @@
+{
+  "name": "Media Player",
+  "id": "com.apex.mediaplayer",
+  "version": "1.0.0",
+  "author": "ApexOS",
+  "description": "HTML5 audio and video player for ApexOS",
+  "permissions": [
+    "hardware.usb.read",
+    "filesystem.read"
+  ],
+  "entry": "index.html",
+  "window": {
+    "width": 720,
+    "height": 480,
+    "icon": "🎬"
+  }
+}

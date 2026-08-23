@@ -3,37 +3,82 @@
         "label": "APEXOS_DISK",
         "block_size": 512,
         "total_blocks": 2048,
-        "used_blocks": 4
+        "used_blocks": 11
     },
     "files": {
         "/": {
             "type": "dir",
-            "content": ["bin", "home", "root", "readme.txt"],
+            "content": [
+                "bin",
+                "home",
+                "root",
+                "system",
+                "readme.txt"
+            ],
             "owner": "root"
         },
         "/readme.txt": {
             "type": "file",
-            "content": "Welcome to ApexOS!\nA virtual operating system streamed in your browser.",
+            "content": "Welcome to ApexOS Hybrid Edition.\nVirtual OS with Web APIs, .apx packages, and hardware bridge.",
             "owner": "root"
         },
         "/bin": {
             "type": "dir",
-            "content": ["matrix", "sysinfo", "ps"],
+            "content": [
+                "matrix",
+                "sysinfo",
+                "ps",
+                "apx"
+            ],
             "owner": "root"
         },
         "/home": {
+            "type": "dir",
+            "content": [
+                "apps"
+            ],
+            "owner": "root"
+        },
+        "/home/apps": {
             "type": "dir",
             "content": [],
             "owner": "root"
         },
         "/root": {
             "type": "dir",
-            "content": [".bashrc"],
+            "content": [
+                ".bashrc"
+            ],
             "owner": "root"
         },
         "/root/.bashrc": {
             "type": "file",
-            "content": "alias ll='ls -la'\nexport PATH=/bin",
+            "content": "export PATH=/bin\n",
+            "owner": "root"
+        },
+        "/system": {
+            "type": "dir",
+            "content": [
+                "etc",
+                "apps"
+            ],
+            "owner": "root"
+        },
+        "/system/etc": {
+            "type": "dir",
+            "content": [
+                "permissions.json"
+            ],
+            "owner": "root"
+        },
+        "/system/etc/permissions.json": {
+            "type": "file",
+            "content": "{}",
+            "owner": "root"
+        },
+        "/system/apps": {
+            "type": "dir",
+            "content": [],
             "owner": "root"
         }
     }

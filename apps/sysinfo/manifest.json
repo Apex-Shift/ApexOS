@@ -1,9 +1,1 @@
-{
-  "id": "sysinfo",
-  "name": "System",
-  "icon": "ℹ️",
-  "version": "1.0.0",
-  "window": { "width": 420, "height": 300 },
-  "desktop": true,
-  "entry": "app.js"
-}
+{"id":"sysinfo","name":"System","icon":"ℹ️","version":"1.0.0","desktop":true}

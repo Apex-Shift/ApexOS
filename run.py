@@ -1,4 +1,4 @@
-"""Simple launcher for ApexOS — run from the project root."""
+"""ApexOS launcher — run from project root."""
 import sys
 import os
 from pathlib import Path
@@ -12,7 +12,7 @@ import uvicorn
 
 if __name__ == "__main__":
     print("=========================================================")
-    print("      APEXOS  —  Desktop Edition v2.2.0                  ")
+    print("      APEXOS  —  Hybrid Edition v3.0.0                   ")
     print("=========================================================")
     print("  → http://127.0.0.1:8000")
     print("=========================================================")

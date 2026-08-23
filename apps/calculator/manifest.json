@@ -1,9 +1,1 @@
-{
-  "id": "calculator",
-  "name": "Calculator",
-  "icon": "🧮",
-  "version": "1.0.0",
-  "window": { "width": 320, "height": 460 },
-  "desktop": true,
-  "entry": "app.js"
-}
+{"id":"calculator","name":"Calculator","icon":"🧮","version":"1.0.0","desktop":true}

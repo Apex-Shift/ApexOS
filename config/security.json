@@ -1,1 +1,1 @@
-{"auth_method": "sha256", "session_timeout": 3600}
+{"auth":"sha256","session_timeout":3600}
