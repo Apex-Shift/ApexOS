@@ -1,4 +1,5 @@
 # ApexOS Hybrid Edition
+<img width="1366" height="609" alt="image" src="https://github.com/user-attachments/assets/e91afe37-6a93-4ce4-a7ae-020938327435" />
 
 **A virtual operating system in the browser** — desktop GUI, terminal, packages, and real hardware access via Web APIs.
 
