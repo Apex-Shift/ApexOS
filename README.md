@@ -1,7 +1,6 @@
 # ApexOS Hybrid Edition
-<img width="1366" height="609" alt="image" src="https://github.com/user-attachments/assets/e91afe37-6a93-4ce4-a7ae-020938327435" />
 
-**A virtual operating system in the browser** — desktop GUI, terminal, packages, and real hardware access via Web APIs.
+**A virtual operating system in the browser** — desktop GUI, terminal, packages, hardware Web APIs, **sudo elevation**, and a **Task Manager**.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.10+-green.svg)
@@ -12,20 +11,21 @@
 
 | Area | Capabilities |
 |------|----------------|
-| **Desktop** | Window manager, taskbar, start menu, icons |
-| **Terminal** | Full shell + `apx`, `lsusb`, `bluetooth`, `network` |
+| **Desktop (HexaDE)** | Windows with Haiku-style tabs, yellow focus / red root outline |
+| **Terminal** | Shell + `sudo` (masked password, 15 min elevation token) |
+| **Task Manager** | Live process table, kill with privilege gates |
 | **Files** | Persistent VFS (`storage/disk.img`) |
-| **Settings** | Network status, Web Bluetooth, WebUSB, permission registry |
-| **Packages** | `.apx` install with Android-style permission gatekeeper |
-| **Apps** | Calculator, text editor, browser, system info |
-| **Security** | Login (RBAC), per-app permission grants in `/system/etc/permissions.json` |
+| **Settings** | Network, Bluetooth, USB, permissions |
+| **Packages** | `.apx` install + gatekeeper |
+| **Media** | HTML5 audio/video player package |
+| **Security** | Login, session tokens, sudo elevation, app permissions |
 
 ---
 
 ## Quick start
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/ApexOS.git
+git clone https://github.com/apex-shift/ApexOS.git
 cd ApexOS
 python -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
@@ -42,108 +42,59 @@ Open **http://127.0.0.1:8000**
 
 ---
 
-## Hybrid architecture (Web APIs)
+## Sudo elevation
 
-ApexOS bridges the virtual desktop to the **host browser**:
+```text
+guest@apexos:~$ sudo sysinfo
+[sudo] password for guest: ********
+Elevated to root for 15 minutes.
+```
 
-- **Network** — `navigator.connection` / `navigator.onLine` (Settings → Network, `network` CLI)
-- **Bluetooth** — `navigator.bluetooth` (Settings → Bluetooth, `bluetooth scan`)
-- **USB** — `navigator.usb` (Settings → USB, `lsusb`)
-
-Hardware calls are user-gated by the browser. Chrome/Edge on localhost or HTTPS work best.
+- Terminal title bar turns **red** (HexaDE root mode)
+- Token lasts **15 minutes**, then expires automatically
+- Task Manager → **Sudo mode** unlocks killing root-owned tasks
 
 ---
 
-## `.apx` package format
+## Task Manager
 
-An `.apx` file is a **ZIP** archive:
+Desktop icon **Tasks** — telemetry from `/api/v1/sys/telemetry` (1s refresh).
 
-```text
-my-app.apx
-├── manifest.json
-├── index.js
-└── (optional assets)
+Guest cannot end root processes without elevation.
+
+---
+
+## Packages (`.apx`)
+
+```bash
+python tools/apx_packager.py --src ./my_app --out ./dist/my_app.apx \
+  --name "My App" --id com.example.myapp --perms hardware.network.read
 ```
 
-### manifest.json
-
-```json
-{
-  "name": "Hello World",
-  "id": "com.apex.helloworld",
-  "version": "1.0.0",
-  "author": "ApexOS",
-  "permissions": ["hardware.network.read", "hardware.usb.read"],
-  "entry": "index.js"
-}
-```
-
-### Install
-
-1. Open **Packages** on the desktop  
-2. Select a `.apx` / `.zip` file  
-3. Confirm permissions in the gatekeeper dialog  
-
-CLI:
-
-```text
-apx list
-apx remove com.apex.helloworld
-perms
-```
-
-Sample package: `packages/hello-world.apx`
-
-Permissions are stored in the VFS at `/system/etc/permissions.json`.
+Sample packages: `packages/hello-world.apx`, `packages/media-player.apx`
 
 ---
 
 ## Shell commands
 
 ```text
-login / whoami / pwd / date / sysinfo
+login / whoami / pwd / date / sysinfo / help
 ls  cd  cat  write  touch  mkdir  rm
 echo  ps  kill  matrix  clear
+sudo <command>
 apx list | apx remove <id>
 perms
-lsusb
-bluetooth scan
-network
-help
+lsusb | bluetooth scan | network
 ```
 
 ---
 
-## Project layout
+## Wiki
 
-```text
-ApexOS/
-├── apps/                 # Built-in app manifests
-├── packages/             # Sample .apx packages
-├── src/
-│   ├── api/              # FastAPI + desktop frontend
-│   ├── auth/             # Authentication
-│   ├── core/             # Kernel, scheduler, apx engine
-│   └── filesystem/       # VFS
-├── storage/disk.img      # Persistent disk (created at runtime)
-├── run.py
-├── requirements.txt
-└── README.md
-```
-
----
-
-## Roadmap implemented
-
-- [x] Phase 1 — Network / Bluetooth / USB control panels + CLI  
-- [x] Phase 2 — `.apx` package format + install API + gatekeeper UI  
-- [x] Phase 3 — Permission registry + grant API  
-- [x] Phase 4 — `apx`, `lsusb`, `bluetooth scan`, `network` commands  
+Full documentation in English: [`docs/wiki/Home.md`](docs/wiki/Home.md)
 
 ---
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
-
-Web Bluetooth / WebUSB behavior depends on the browser vendor. Use HTTPS or `localhost` for full API access.

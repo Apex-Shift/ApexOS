@@ -5,6 +5,7 @@ from typing import Dict, Any
 from src.core.scheduler import AsyncScheduler
 from src.filesystem.vfs import VirtualFileSystem
 from src.auth.rbac import SecuritySubsystem
+from src.core.sudo_manager import SudoManager
 
 class ApexKernel:
     def __init__(self):
@@ -13,6 +14,7 @@ class ApexKernel:
         self.scheduler = AsyncScheduler()
         self.vfs = VirtualFileSystem()
         self.auth = SecuritySubsystem()
+        self.sudo = SudoManager()
         self.active_sessions: Dict[str, Dict[str, Any]] = {}
 
     def register_session(self, token: str, username: str) -> None:
@@ -120,6 +122,26 @@ class ApexKernel:
             del reg[app_id]
             self.set_permissions(reg)
         return f"Removed package {app_id}."
+
+
+    def telemetry(self) -> list:
+        import random
+        rows = [{
+            "pid": 1, "ppid": 0, "name": "system-init", "user": "root",
+            "status": "sleeping", "cpu_usage": 0.05,
+            "mem_usage": round(12.0 + random.random(), 1),
+        }]
+        for pid, proc in self.scheduler.table.items():
+            rows.append({
+                "pid": pid,
+                "ppid": 1,
+                "name": proc.name,
+                "user": getattr(proc, "owner", "root"),
+                "status": str(proc.status).lower(),
+                "cpu_usage": round(random.uniform(0.1, 3.5), 2),
+                "mem_usage": round(random.uniform(8, 48), 1),
+            })
+        return rows
 
     async def syscall(self, token: str, identifier: str, params: list) -> Dict[str, Any]:
         if token not in self.active_sessions:

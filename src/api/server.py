@@ -34,6 +34,11 @@ def discover_apps():
 async def list_apps():
     return JSONResponse(discover_apps())
 
+@app.get("/api/v1/sys/telemetry")
+async def sys_telemetry():
+    kernel.sudo.purge_expired()
+    return JSONResponse(kernel.telemetry())
+
 @app.post("/api/apx/install")
 async def apx_install(file: UploadFile = File(...)):
     """Install an uploaded .apx (zip) package into the VFS."""
@@ -193,6 +198,26 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
 .editor-bar{padding:8px;background:#151e2c;display:flex;gap:6px}
 .editor-bar input{flex:1;background:#0a1018;border:1px solid rgba(255,255,255,.09);border-radius:6px;padding:6px 10px;color:#c5d0dc;font-size:13px}
 .editor textarea{flex:1;background:#0d1219;border:none;outline:none;color:#e0e6ed;font-family:Consolas,monospace;font-size:13px;padding:12px;resize:none}
+
+/* === HexaDE theme === */
+:root{--haiku-yellow:#f0c000;--root-red:#c0392b;--border-color:#2a2d32}
+.titlebar.hexade{background:linear-gradient(180deg,#2a2d32,#1e2126);border-bottom:2px solid var(--haiku-yellow)}
+.titlebar.hexade.root-privilege{border-bottom-color:var(--root-red);background:linear-gradient(180deg,#3a2222,#2a1818)}
+.titlebar.hexade.root-privilege .title{color:#ff8882}
+.window.hexade{border-radius:2px;border:1px solid var(--border-color)}
+.window.hexade.focused{border-color:var(--haiku-yellow)}
+.window.hexade.focused.root-frame{border-color:var(--root-red);box-shadow:0 0 0 1px var(--root-red),0 18px 52px rgba(0,0,0,.55)}
+.xfce-menu-bar{display:flex;gap:12px;padding:4px 10px;background:#2a2d32;border-bottom:1px solid var(--border-color);font-size:11px;color:var(--haiku-yellow)}
+.xfce-menu-item{cursor:pointer}.xfce-menu-item:hover{color:#fff}
+#taskman-table{width:100%;border-collapse:collapse;font-size:12px}
+#taskman-table th{background:#2a2d32;color:var(--haiku-yellow);padding:6px;text-align:left;border-bottom:1px solid var(--border-color)}
+#taskman-table td{padding:6px;border-bottom:1px solid #1c1d22}
+#taskman-table tbody tr{cursor:pointer}
+#taskman-table tbody tr:hover{background:#26292f}
+#taskman-table tbody tr.selected{background:#343842;outline:1px solid var(--haiku-yellow)}
+#taskman-table tbody tr.selected-root{outline:1px solid var(--root-red)}
+.taskman-alert{background:#3a2222;border-bottom:1px solid var(--root-red);color:#ff8882;font-size:11px;padding:4px 10px}
+
 </style>
 </head>
 <body>
@@ -231,6 +256,7 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
     browser:   {id:"browser",   name:"Browser",    icon:"🌐", desktop:true},
     sysinfo:   {id:"sysinfo",   name:"System",     icon:"ℹ️", desktop:true},
     media:     {id:"media",     name:"Media",      icon:"🎬", desktop:true},
+    taskman:   {id:"taskman",   name:"Tasks",      icon:"📊", desktop:true},
   };
   const $= (s,c=document)=>c.querySelector(s);
   const $$= (s,c=document)=>[...c.querySelectorAll(s)];
@@ -331,9 +357,9 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
   function createWindow(title, icon, w=640, h=420){
     const id="w"+(winId++);
     const win=document.createElement("div");
-    win.className="window focused"; win.dataset.id=id;
+    win.className="window focused hexade"; win.dataset.id=id;
     win.style.cssText=`width:${w}px;height:${h}px;left:${40+(winId%6)*28}px;top:${30+(winId%4)*24}px`;
-    win.innerHTML=`<div class="titlebar"><span class="title">${icon} ${title}</span>
+    win.innerHTML=`<div class="titlebar hexade"><span class="title">${icon} ${title}</span>
       <button class="win-btn min"></button><button class="win-btn max"></button><button class="win-btn close"></button></div>
       <div class="window-body"></div>`;
     $("#desktop").appendChild(win);
@@ -364,6 +390,7 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
     else if(name==="browser") openBrowser();
     else if(name==="sysinfo") openSysInfo();
     else if(name==="media") openMediaPlayer();
+    else if(name==="taskman") openTaskManager();
   }
 
   function openTerminal(){
@@ -380,9 +407,49 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
     const oc=$(".win-btn.close",win).onclick; $(".win-btn.close",win).onclick=()=>{document.removeEventListener("apex-msg",h); oc();};
     input.onkeydown=e=>{
       if(e.key==="Enter"){
-        const cmd=input.value.trim(); if(!cmd)return;
+        const cmd=input.value.trim(); if(!cmd && !input.dataset.sudoPending)return;
+        // Password response for sudo
+        if(input.dataset.sudoPending!==undefined){
+          const pending=input.dataset.sudoPending; const password=input.value;
+          delete input.dataset.sudoPending; input.type="text"; input.value="";
+          const hh=(ev)=>{
+            const d=ev.detail;
+            if(d.sudo_ok===true){
+              win._elevToken=d.elev_token;
+              $(".titlebar",win).classList.add("root-privilege");
+              win.classList.add("root-frame");
+              append(d.output||"Elevated to root (15 min).");
+              const ttl=Math.max(5,(d.expires_at||0)-Math.floor(Date.now()/1000));
+              if(win._elevTimer) clearTimeout(win._elevTimer);
+              win._elevTimer=setTimeout(()=>{
+                win._elevToken=null;
+                $(".titlebar",win).classList.remove("root-privilege");
+                win.classList.remove("root-frame");
+                append("sudo: elevation expired.");
+              }, ttl*1000);
+              if(ws&&ws.readyState===1) ws.send(JSON.stringify({token:sessionToken,elev_token:win._elevToken,raw_input:pending}));
+              document.removeEventListener("apex-msg",hh);
+            } else if(d.sudo_ok===false){
+              append(d.output||"Sorry, try again.","error");
+              document.removeEventListener("apex-msg",hh);
+            }
+          };
+          document.addEventListener("apex-msg",hh);
+          ws.send(JSON.stringify({token:sessionToken,action:"sudo_auth",password:password}));
+          return;
+        }
         append(`${prompt.textContent} ${cmd}`,"cmd-line"); hist.push(cmd); hi=hist.length;
         if(cmd.toLowerCase()==="clear") out.innerHTML="";
+        else if(cmd.toLowerCase().startsWith("sudo ")){
+          const real=cmd.slice(5).trim();
+          if(!real){ append("usage: sudo <command>","error"); input.value=""; return; }
+          if(win._elevToken){
+            ws.send(JSON.stringify({token:sessionToken,elev_token:win._elevToken,raw_input:real}));
+            input.value=""; return;
+          }
+          append("[sudo] password for "+(currentUser||"user")+": ");
+          input.type="password"; input.dataset.sudoPending=real; input.value=""; return;
+        }
         else if(cmd.toLowerCase()==="lsusb"){ handleLsusb(append); }
         else if(cmd.toLowerCase().startsWith("bluetooth")){ handleBluetoothCli(cmd, append); }
         else if(cmd.toLowerCase()==="network" || cmd.toLowerCase()==="netstat"){ handleNetworkCli(append); }
@@ -724,6 +791,78 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
     }
   }
 
+
+  function openTaskManager(){
+    const {win,body}=createWindow("Task Manager","📊",520,380);
+    body.innerHTML=`<div style="height:100%;display:flex;flex-direction:column;background:#1a1b1e">
+      <div class="xfce-menu-bar">
+        <span class="xfce-menu-item" id="tm-refresh">🔄 Refresh</span>
+        <span class="xfce-menu-item" id="tm-sudo">⚡ Sudo mode</span>
+      </div>
+      <div class="taskman-alert" id="tm-alert">Guest mode — elevate to kill root processes.</div>
+      <div style="flex:1;overflow:auto"><table id="taskman-table">
+        <thead><tr><th>PID</th><th>Name</th><th>User</th><th>CPU %</th><th>RAM</th></tr></thead>
+        <tbody id="tm-body"></tbody>
+      </table></div>
+      <div style="height:32px;border-top:1px solid #2a2d32;display:flex;justify-content:space-between;align-items:center;padding:0 10px;background:#1a1b1e">
+        <span id="tm-stats" style="font-size:11px;color:#8a8d98">Total: 0</span>
+        <button class="btn danger" id="tm-kill" disabled style="padding:2px 10px;font-size:11px">End task</button>
+      </div></div>`;
+    let selected=null, elev=null;
+    const titlebar=$(".titlebar",win);
+    async function refresh(){
+      try{
+        const r=await fetch("/api/v1/sys/telemetry");
+        const rows=await r.json();
+        const tb=body.querySelector("#tm-body"); tb.innerHTML="";
+        rows.forEach(p=>{
+          const tr=document.createElement("tr");
+          tr.innerHTML=`<td>${p.pid}</td><td>${p.name}</td><td>${p.user}</td><td>${p.cpu_usage}</td><td>${p.mem_usage}</td>`;
+          tr.onclick=()=>{
+            tb.querySelectorAll("tr").forEach(x=>x.classList.remove("selected","selected-root"));
+            tr.classList.add(p.user==="root"?"selected-root":"selected");
+            selected=p; body.querySelector("#tm-kill").disabled=false;
+          };
+          tb.appendChild(tr);
+        });
+        body.querySelector("#tm-stats").textContent="Total: "+rows.length+" processes";
+      }catch(e){ body.querySelector("#tm-stats").textContent="Telemetry error"; }
+    }
+    body.querySelector("#tm-refresh").onclick=refresh;
+    body.querySelector("#tm-sudo").onclick=()=>{
+      const pw=prompt("[sudo] password for "+currentUser+":");
+      if(pw==null)return;
+      const h=(e)=>{
+        if(e.detail.sudo_ok){
+          elev=e.detail.elev_token;
+          titlebar.classList.add("root-privilege");
+          win.classList.add("root-frame");
+          body.querySelector("#tm-alert").style.display="none";
+        } else if(e.detail.sudo_ok===false){
+          alert(e.detail.output||"Sorry, try again.");
+        }
+        document.removeEventListener("apex-msg",h);
+      };
+      document.addEventListener("apex-msg",h);
+      ws.send(JSON.stringify({token:sessionToken,action:"sudo_auth",password:pw}));
+    };
+    body.querySelector("#tm-kill").onclick=()=>{
+      if(!selected)return;
+      if(selected.user==="root"&&!elev&&currentUser!=="root"){
+        alert("Permission denied: use Sudo mode to kill root tasks.");
+        return;
+      }
+      const payload={token:sessionToken,raw_input:"kill "+selected.pid};
+      if(elev) payload.elev_token=elev;
+      ws.send(JSON.stringify(payload));
+      setTimeout(refresh,300);
+    };
+    refresh();
+    const iv=setInterval(refresh,1000);
+    const oc=$(".win-btn.close",win).onclick;
+    $(".win-btn.close",win).onclick=()=>{clearInterval(iv); if(oc)oc();};
+  }
+
   function openSysInfo(){
     const {body}=createWindow("System","ℹ️",420,280);
     body.innerHTML=`<div style="padding:20px;font-family:monospace;font-size:13px;color:#11ff55;white-space:pre-wrap">Loading…</div>`;
@@ -763,6 +902,33 @@ async def handle_ipc(websocket: WebSocket):
                 file_path = kernel.vfs.resolve_path(cwd, path)
                 msg = kernel.vfs.write_file_content(file_path, content, owner=user)
                 await websocket.send_json({"output": msg, "user": authenticated_user, "cwd": cwd})
+                continue
+
+            if action == "sudo_auth":
+                if not token or token != session_token:
+                    await websocket.send_json({"output": "Unauthenticated.", "sudo_ok": False})
+                    continue
+                password = packet.get("password", "")
+                session = kernel.active_sessions.get(token, {})
+                user = session.get("user", "")
+                cwd = session.get("cwd", "/")
+                if user and kernel.auth.authenticate(user, password):
+                    elev = kernel.sudo.issue(user=user, target_user="root")
+                    await websocket.send_json({
+                        "sudo_ok": True,
+                        "elev_token": elev["token"],
+                        "expires_at": elev["expires_at"],
+                        "output": "Elevated to root for 15 minutes.",
+                        "user": user,
+                        "cwd": cwd,
+                    })
+                else:
+                    await websocket.send_json({
+                        "sudo_ok": False,
+                        "output": "Sorry, try again.",
+                        "user": user,
+                        "cwd": cwd,
+                    })
                 continue
 
             raw = packet.get("raw_input", "").strip()
@@ -826,7 +992,7 @@ async def handle_ipc(websocket: WebSocket):
                     "  perms          — list app permissions\n"
                     "  lsusb          — list USB devices (WebUSB)\n"
                     "  bluetooth scan — BLE device picker\n"
-                    "  network        — host network status"
+                    "  network        — host network status\n"                    "  sudo <cmd>     — elevate (15 min token)"
                 )
                 cwd = kernel.active_sessions[token]["cwd"]
                 await websocket.send_json({"output": help_text, "user": authenticated_user, "cwd": cwd})
