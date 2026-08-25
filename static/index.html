@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ApexOS Hybrid</title>
+  <link rel="stylesheet" href="/static/css/hexade.css">
+</head>
+<body>
+  <div id="login-overlay">
+    <div class="login-box">
+      <h1>ApexOS</h1>
+      <p>Hybrid Edition — Core · HexaDE · Packages</p>
+      <input id="login-user" value="root" placeholder="Username">
+      <input id="login-pass" type="password" value="password" placeholder="Password">
+      <button id="login-btn">Sign in</button>
+      <div class="login-error" id="login-error"></div>
+      <div class="login-hint">root / password · guest / guest</div>
+    </div>
+  </div>
+
+  <div id="deskbar">
+    <button id="deskbar-menu-btn">◆ Apex</button>
+    <div id="deskbar-wins"></div>
+    <div id="deskbar-right">
+      <button class="deskbar-btn hidden" id="db-usb" title="USB">🔌</button>
+      <button class="deskbar-btn hidden" id="db-bt" title="Bluetooth">📶</button>
+      <span id="deskbar-clock" title="Calendar"></span>
+      <button class="deskbar-btn" id="db-logoff" title="Sign out">⏻</button>
+    </div>
+  </div>
+
+  <div id="desktop"></div>
+
+  <div id="start-menu">
+    <div id="start-apps"></div>
+    <div class="start-sep"></div>
+    <div class="start-item" id="logout-btn"><span style="width:28px;text-align:center">⏻</span> Sign out</div>
+  </div>
+  <div id="cal-pop"><div class="cal-title" id="cal-title">—</div><div id="cal-body">Click outside to close.</div></div>
+
+  <script src="/static/js/apex-host.js"></script>
+  <script src="/static/js/hexade-de.js"></script>
+</body>
+</html>

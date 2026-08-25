@@ -1,32 +1,31 @@
 # ApexOS Hybrid Edition
 
-**A virtual operating system in the browser** — desktop GUI, terminal, packages, hardware Web APIs, **sudo elevation**, and a **Task Manager**.
+Virtual operating system in the browser — **decoupled core** + **HexaDE** desktop environment.
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Python](https://img.shields.io/badge/python-3.10+-green.svg)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/)
 
----
+## Architecture
 
-## Features
+```text
+static/                 ← Desktop Environment (HexaDE)
+  css/hexade.css
+  js/apex-host.js       ← WebSocket / session bridge
+  js/hexade-de.js       ← Deskbar, windows, apps, context menu
+  index.html
 
-| Area | Capabilities |
-|------|----------------|
-| **Desktop (HexaDE)** | Windows with Haiku-style tabs, yellow focus / red root outline |
-| **Terminal** | Shell + `sudo` (masked password, 15 min elevation token) |
-| **Task Manager** | Live process table, kill with privilege gates |
-| **Files** | Persistent VFS (`storage/disk.img`) |
-| **Settings** | Network, Bluetooth, USB, permissions |
-| **Packages** | `.apx` install + gatekeeper |
-| **Media** | HTML5 audio/video player package |
-| **Security** | Login, session tokens, sudo elevation, app permissions |
+src/                    ← OS core (no UI chrome)
+  api/server.py         ← REST + WebSocket only
+  core/                 ← kernel, scheduler, sudo
+  filesystem/           ← VFS
+  auth/                 ← login
+```
 
----
+Swap or fork the DE under `static/` without touching the kernel.
 
 ## Quick start
 
 ```bash
-git clone https://github.com/apex-shift/ApexOS.git
-cd ApexOS
 python -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
@@ -35,65 +34,46 @@ python run.py
 
 Open **http://127.0.0.1:8000**
 
-| User | Password |
-|------|----------|
-| root | password |
-| guest | guest |
+| User  | Password |
+|-------|----------|
+| root  | password |
+| guest | guest    |
 
----
+## Features
 
-## Sudo elevation
+- **HexaDE Deskbar** (top): app menu, window list, calendar, USB/BT when available, logoff  
+- **Context menu** on desktop and icons  
+- **Terminal** with `sudo` (15 min elevation, red titlebar)  
+- **Task Manager** with privilege gates  
+- **`.apx` packages** + permission gatekeeper  
+- **Web APIs**: network status, WebUSB, Web Bluetooth  
+- **Wasm Test**: validates `WebAssembly.instantiate` with a minimal module  
+- **Session restore** via `sessionStorage`  
 
-```text
-guest@apexos:~$ sudo sysinfo
-[sudo] password for guest: ********
-Elevated to root for 15 minutes.
-```
-
-- Terminal title bar turns **red** (HexaDE root mode)
-- Token lasts **15 minutes**, then expires automatically
-- Task Manager → **Sudo mode** unlocks killing root-owned tasks
-
----
-
-## Task Manager
-
-Desktop icon **Tasks** — telemetry from `/api/v1/sys/telemetry` (1s refresh).
-
-Guest cannot end root processes without elevation.
-
----
-
-## Packages (`.apx`)
-
-```bash
-python tools/apx_packager.py --src ./my_app --out ./dist/my_app.apx \
-  --name "My App" --id com.example.myapp --perms hardware.network.read
-```
-
-Sample packages: `packages/hello-world.apx`, `packages/media-player.apx`
-
----
-
-## Shell commands
+## Shell
 
 ```text
-login / whoami / pwd / date / sysinfo / help
-ls  cd  cat  write  touch  mkdir  rm
-echo  ps  kill  matrix  clear
-sudo <command>
-apx list | apx remove <id>
-perms
+help | sysinfo | ls cd cat write mkdir rm
+sudo <cmd> | apx list | apx remove <id> | perms
 lsusb | bluetooth scan | network
 ```
 
----
+## Packages
 
-## Wiki
+```bash
+python tools/apx_packager.py --src ./my_app --out ./dist/my.apx \
+  --name "My App" --id com.example.app --perms hardware.network.read
+```
 
-Full documentation in English: [`docs/wiki/Home.md`](docs/wiki/Home.md)
+Samples: `packages/hello-world.apx`, `packages/media-player.apx`
 
----
+## Documentation
+
+| Doc | Path |
+|-----|------|
+| Wiki home | [docs/wiki/Home.md](docs/wiki/Home.md) |
+| Architecture | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Getting started | [docs/wiki/Getting-Started.md](docs/wiki/Getting-Started.md) |
 
 ## License
 
