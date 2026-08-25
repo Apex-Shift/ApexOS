@@ -12,7 +12,6 @@ APPS_DIR = Path(__file__).resolve().parent.parent.parent / "apps"
 @app.middleware("http")
 async def security_headers(request, call_next):
     response = await call_next(request)
-    # credentialless enables SharedArrayBuffer where needed without breaking same-origin WS
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     response.headers["Cross-Origin-Embedder-Policy"] = "credentialless"
     response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
@@ -41,7 +40,6 @@ async def sys_telemetry():
 
 @app.post("/api/apx/install")
 async def apx_install(file: UploadFile = File(...)):
-    """Install an uploaded .apx (zip) package into the VFS."""
     try:
         data = await file.read()
         zf = zipfile.ZipFile(io.BytesIO(data))
@@ -50,7 +48,6 @@ async def apx_install(file: UploadFile = File(...)):
         for name in zf.namelist():
             if name.endswith("/"):
                 continue
-            # normalize path (strip leading folder if present)
             parts = name.split("/")
             rel = "/".join(parts[1:]) if len(parts) > 1 and parts[0] and not parts[0].endswith(".json") and "manifest" not in parts[0] else name
             if name.endswith("manifest.json") or rel.endswith("manifest.json"):
@@ -62,14 +59,12 @@ async def apx_install(file: UploadFile = File(...)):
             except UnicodeDecodeError:
                 files[rel] = base64.b64encode(content).decode("ascii")
         if not manifest:
-            # try find manifest in files
             for k, v in files.items():
                 if k.endswith("manifest.json"):
                     manifest = json.loads(v)
                     break
         if not manifest:
             return JSONResponse({"ok": False, "error": "manifest.json not found in package"}, status_code=400)
-        # If files dict still messy, rebuild
         clean = {}
         for name in zf.namelist():
             if name.endswith("/"):
@@ -83,7 +78,6 @@ async def apx_install(file: UploadFile = File(...)):
             if base == "manifest.json":
                 clean["manifest.json"] = text
             else:
-                # keep relative path without top-level folder
                 segs = name.replace("\\", "/").split("/")
                 rel = "/".join(segs[1:]) if len(segs) > 1 else segs[0]
                 clean[rel] = text
@@ -94,7 +88,6 @@ async def apx_install(file: UploadFile = File(...)):
 
 @app.get("/api/packages/{app_id}/{file_path:path}")
 async def get_package_file(app_id: str, file_path: str):
-    """Serve a file from an installed .apx package in the VFS."""
     path = f"/home/apps/{app_id}/{file_path}"
     content = kernel.vfs.read_file_content(path)
     if content.startswith("cat:"):
@@ -116,8 +109,8 @@ async def grant_perm(body: dict):
     msg = kernel.grant_permission(app_id, permission)
     return JSONResponse({"ok": True, "message": msg})
 
-if APPS_DIR.exists():
-    app.mount("/apps", StaticFiles(directory=str(APPS_DIR)), name="apps")
+APPS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/apps", StaticFiles(directory=str(APPS_DIR)), name="apps")
 
 HTML_INTERFACE = r"""
 <!DOCTYPE html>
@@ -217,7 +210,6 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
 #taskman-table tbody tr.selected{background:#343842;outline:1px solid var(--haiku-yellow)}
 #taskman-table tbody tr.selected-root{outline:1px solid var(--root-red)}
 .taskman-alert{background:#3a2222;border-bottom:1px solid var(--root-red);color:#ff8882;font-size:11px;padding:4px 10px}
-
 </style>
 </head>
 <body>
@@ -245,7 +237,11 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
 </div>
 <script>
 (() => {
-  let ws=null, sessionToken="", currentUser="", currentCwd="/", winId=1, wsReady=false, pendingLogin=null;
+  let ws = null, 
+      sessionToken = sessionStorage.getItem("apex_token") || "", 
+      currentUser = sessionStorage.getItem("apex_user") || "", 
+      currentCwd = "/", winId = 1, wsReady = false, pendingLogin = null;
+
   const APP_REGISTRY = {
     terminal:  {id:"terminal",  name:"Terminal",   icon:"💻", desktop:true},
     explorer:  {id:"explorer",  name:"Files",      icon:"📁", desktop:true},
@@ -257,6 +253,7 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
     sysinfo:   {id:"sysinfo",   name:"System",     icon:"ℹ️", desktop:true},
     media:     {id:"media",     name:"Media",      icon:"🎬", desktop:true},
     taskman:   {id:"taskman",   name:"Tasks",      icon:"📊", desktop:true},
+    wasmtest:  {id:"wasmtest",  name:"Wasm Test",  icon:"⚡", desktop:true},
   };
   const $= (s,c=document)=>c.querySelector(s);
   const $$= (s,c=document)=>[...c.querySelectorAll(s)];
@@ -277,11 +274,17 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
       if(err && err.textContent.includes("Connecting")) err.textContent="Connected — click Sign in.";
       if(pendingLogin){const {user,pass}=pendingLogin; pendingLogin=null; doLoginSend(user,pass);}
     };
-    ws.onmessage=(ev)=>{try{const d=JSON.parse(ev.data); if(d.token)sessionToken=d.token; if(d.user)currentUser=d.user; if(d.cwd)currentCwd=d.cwd; document.dispatchEvent(new CustomEvent("apex-msg",{detail:d}));}catch(e){}};
+    ws.onmessage=(ev)=>{try{const d=JSON.parse(ev.data); if(d.token){sessionToken=d.token; sessionStorage.setItem("apex_token", sessionToken);} if(d.user){currentUser=d.user; sessionStorage.setItem("apex_user", currentUser);} if(d.cwd)currentCwd=d.cwd; document.dispatchEvent(new CustomEvent("apex-msg",{detail:d}));}catch(e){}};
     ws.onerror=()=>{wsReady=false;};
     ws.onclose=()=>{wsReady=false; setTimeout(connectWS,1500);};
   }
   connectWS();
+
+  // Auto-bypass login if session token exists in storage
+  if (sessionToken && currentUser) {
+    $("#login-overlay").classList.add("hidden");
+    buildDesktop();
+  }
 
   function sendCmd(raw){ if(ws&&ws.readyState===1) ws.send(JSON.stringify({token:sessionToken,raw_input:raw})); }
   function sendWrite(path,content){ if(ws&&ws.readyState===1) ws.send(JSON.stringify({token:sessionToken,action:"write_file",path,content})); }
@@ -297,7 +300,13 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
       const d=e.detail;
       if(d.token){
         done=true; clearTimeout(timer); document.removeEventListener("apex-msg",h);
-        sessionToken=d.token; if(d.user)currentUser=d.user; if(d.cwd)currentCwd=d.cwd;
+        sessionToken=d.token; 
+        if(d.user) currentUser=d.user; 
+        if(d.cwd) currentCwd=d.cwd;
+        
+        sessionStorage.setItem("apex_token", sessionToken);
+        sessionStorage.setItem("apex_user", currentUser);
+
         $("#login-overlay").classList.add("hidden");
         buildDesktop();
         setTimeout(()=>openApp("terminal"),200);
@@ -332,7 +341,12 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
   $("#start-btn").onclick=e=>{e.stopPropagation(); startMenu.classList.toggle("open");};
   document.addEventListener("click",()=>startMenu.classList.remove("open"));
   startMenu.onclick=e=>e.stopPropagation();
-  $("#logout-btn").onclick=()=>location.reload();
+  
+  $("#logout-btn").onclick=()=>{
+    sessionStorage.removeItem("apex_token");
+    sessionStorage.removeItem("apex_user");
+    location.reload();
+  };
 
   function buildDesktop(){
     const desk=$("#desktop"); desk.innerHTML="";
@@ -363,7 +377,6 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
       <button class="win-btn min"></button><button class="win-btn max"></button><button class="win-btn close"></button></div>
       <div class="window-body"></div>`;
     $("#desktop").appendChild(win);
-    // drag
     const bar=$(".titlebar",win); let ox,oy,drag=false;
     bar.onmousedown=e=>{if(e.target.classList.contains("win-btn"))return; drag=true; ox=e.clientX-win.offsetLeft; oy=e.clientY-win.offsetTop; $$(".window").forEach(w=>w.classList.remove("focused")); win.classList.add("focused");};
     document.addEventListener("mousemove",e=>{if(!drag)return; win.style.left=Math.max(0,e.clientX-ox)+"px"; win.style.top=Math.max(0,e.clientY-oy)+"px";});
@@ -391,6 +404,7 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
     else if(name==="sysinfo") openSysInfo();
     else if(name==="media") openMediaPlayer();
     else if(name==="taskman") openTaskManager();
+    else if(name==="wasmtest") openWasmTest();
   }
 
   function openTerminal(){
@@ -408,7 +422,6 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
     input.onkeydown=e=>{
       if(e.key==="Enter"){
         const cmd=input.value.trim(); if(!cmd && !input.dataset.sudoPending)return;
-        // Password response for sudo
         if(input.dataset.sudoPending!==undefined){
           const pending=input.dataset.sudoPending; const password=input.value;
           delete input.dataset.sudoPending; input.type="text"; input.value="";
@@ -605,7 +618,6 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
         const m=j.manifest||{};
         const perms=m.permissions||[];
         if(perms.length){
-          // Gatekeeper modal
           showPermissionModal(m.id||m.name, perms, async(granted)=>{
             if(granted){
               for(const p of perms){
@@ -630,7 +642,6 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
     }
     $("#apx-refresh",body).onclick=refreshList;
     refreshList();
-    // Quick launch Media Player package if installed
     const launchBtn=document.createElement("button");
     launchBtn.className="btn secondary";
     launchBtn.textContent="Open Media Player package";
@@ -735,11 +746,9 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
     $("#go",body).onclick=go; $("#url",body).onkeydown=e=>{if(e.key==="Enter")go();};
   }
 
-
   function openMediaPlayer(opts={}){
     const title = opts.title || "Media Player";
     const {body} = createWindow(title, "🎬", 720, 480);
-    // Prefer installed package HTML if available, else embedded player
     const pkgUrl = opts.appId ? `/api/packages/${opts.appId}/index.html` : null;
     if(pkgUrl){
       body.innerHTML = `<iframe src="${pkgUrl}" style="width:100%;height:100%;border:none;background:#0d1219" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>`;
@@ -760,7 +769,6 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
       </div>`;
     const frame = body.querySelector("#media-frame");
     frame.onerror = showFallback;
-    // If package not installed, fall back after short check
     fetch("/api/packages/com.apex.mediaplayer/index.html").then(r=>{
       if(!r.ok) showFallback();
     }).catch(showFallback);
@@ -790,7 +798,6 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
       root.querySelector("#m-dv").onclick=()=>{ const v=document.createElement("video"); v.src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"; loadEl(v,"Demo video"); };
     }
   }
-
 
   function openTaskManager(){
     const {win,body}=createWindow("Task Manager","📊",520,380);
@@ -869,7 +876,110 @@ html,body{height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-seri
     const h=(e)=>{if(e.detail.output&&e.detail.output.includes("OS")){ $("div",body).textContent=e.detail.output; document.removeEventListener("apex-msg",h); }};
     document.addEventListener("apex-msg",h); sendCmd("sysinfo");
   }
+
+  let activeContextMenu = null;
+  function closeContextMenu() {
+    if (activeContextMenu) {
+      activeContextMenu.remove();
+      activeContextMenu = null;
+    }
+  }
+  function showContextMenu(x, y, items) {
+    closeContextMenu();
+    const menu = document.createElement("div");
+    menu.className = "apex-context-menu";
+    menu.style.cssText = `
+      position: absolute; top: ${y}px; left: ${x}px;
+      background: #151e2c; border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px; padding: 6px 0; min-width: 170px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      z-index: 999999; font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px; color: #e0e6ed;
+    `;
+    items.forEach((item) => {
+      if (item === "separator") {
+        const sep = document.createElement("div");
+        sep.style.cssText = "height: 1px; background: rgba(255, 255, 255, 0.08); margin: 4px 0;";
+        menu.appendChild(sep); return;
+      }
+      const row = document.createElement("div");
+      row.style.cssText = `padding: 7px 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; user-select: none; transition: background 0.15s ease;`;
+      row.innerHTML = `<span>${item.icon || ""}</span> <span>${item.label}</span>`;
+      row.onmouseenter = () => { row.style.background = "#0066ff"; row.style.color = "#ffffff"; };
+      row.onmouseleave = () => { row.style.background = "transparent"; row.style.color = "#e0e6ed"; };
+      row.onclick = (e) => {
+        e.stopPropagation(); closeContextMenu();
+        if (item.action) item.action();
+      };
+      menu.appendChild(row);
+    });
+    document.body.appendChild(menu);
+    activeContextMenu = menu;
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) menu.style.left = `${x - rect.width}px`;
+    if (rect.bottom > window.innerHeight) menu.style.top = `${y - rect.height}px`;
+  }
+
+  document.addEventListener("click", () => closeContextMenu());
+  document.addEventListener("contextmenu", (e) => {
+    const desktop = $("#desktop");
+    const isDesktopBg = e.target === desktop || e.target.id === "desktop";
+    const iconEl = e.target.closest(".desktop-icon");
+
+    if (isDesktopBg) {
+      e.preventDefault();
+      showContextMenu(e.clientX, e.clientY, [
+        { label: "Open Terminal", icon: "💻", action: () => openApp("terminal") },
+        { label: "Open Files", icon: "📁", action: () => openApp("explorer") },
+        "separator",
+        { label: "Refresh Desktop", icon: "🔄", action: () => location.reload() },
+        { label: "System Info", icon: "ℹ️", action: () => openApp("sysinfo") }
+      ]);
+    } else if (iconEl) {
+      e.preventDefault();
+      const appName = iconEl.querySelector(".label")?.textContent || "App";
+      const iconChar = iconEl.querySelector(".icon")?.textContent || "🚀";
+      showContextMenu(e.clientX, e.clientY, [
+        { label: "Open " + appName, icon: iconChar, action: () => iconEl.dispatchEvent(new Event("dblclick")) },
+        "separator",
+        { label: "Properties", icon: "ℹ️", action: () => alert("App: " + appName) }
+      ]);
+    }
+  });
+
 })();
+async function openWasmTest(){
+    const {body}=createWindow("WebAssembly Native Benchmark","⚡",540,360);
+    body.innerHTML=`<div style="padding:20px;font-family:sans-serif">
+      <h3 style="color:#00c6ff;margin-bottom:8px">Test de Performance WebAssembly (Client)</h3>
+      <p style="color:#a0b0c0;font-size:13px;margin-bottom:16px">Exécute un module Wasm binaire directement dans le navigateur en vitesse native.</p>
+      <button class="btn" id="run-wasm-btn">Exécuter le calcul natif (Fibonacci)</button>
+      <div id="wasm-res" style="margin-top:16px;font-family:monospace;font-size:13px;color:#11ff55;white-space:pre-wrap">Prêt.</div>
+    </div>`;
+    const btn = body.querySelector("#run-wasm-btn");
+    const res = body.querySelector("#wasm-res");
+
+    btn.onclick = async () => {
+      res.textContent = "Compilation du module Wasm...";
+      try {
+        const wasmCode = new Uint8Array([
+          0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x06, 0x01, 0x60, 
+          0x01, 0x7f, 0x01, 0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01, 0x03, 
+          0x66, 0x69, 0x62, 0x00, 0x00, 0x0a, 0x21, 0x01, 0x14, 0x00, 0x20, 0x00, 
+          0x41, 0x02, 0x4c, 0x05, 0x01, 0x41, 0x01, 0x0f, 0x0b, 0x20, 0x00, 0x41, 
+          0x01, 0x7a, 0x10, 0x00, 0x20, 0x00, 0x41, 0x02, 0x7b, 0x10, 0x00, 0x6a, 
+          0x0f, 0x0b
+        ]);
+        const t0 = performance.now();
+        const { instance } = await WebAssembly.instantiate(wasmCode);
+        const output = instance.exports.fib(38);
+        const t1 = performance.now();
+        res.textContent = `Succès !\nCalcul : fib(38) = ${output}\nTemps : ${(t1 - t0).toFixed(2)} ms (Natif Wasm)`;
+      } catch (err) {
+        res.textContent = "Erreur Wasm : " + err.message;
+      }
+    };
+  }
 </script>
 </body>
 </html>
@@ -963,7 +1073,6 @@ async def handle_ipc(websocket: WebSocket):
                 await kernel.scheduler.spawn("matrix", stream_matrix(), owner=authenticated_user)
                 continue
 
-            # apx subcommands
             if cmd == "apx":
                 if not args or args[0] == "list":
                     out = kernel.apx_list()
@@ -992,7 +1101,8 @@ async def handle_ipc(websocket: WebSocket):
                     "  perms          — list app permissions\n"
                     "  lsusb          — list USB devices (WebUSB)\n"
                     "  bluetooth scan — BLE device picker\n"
-                    "  network        — host network status\n"                    "  sudo <cmd>     — elevate (15 min token)"
+                    "  network        — host network status\n"
+                    "  sudo <cmd>     — elevate (15 min token)"
                 )
                 cwd = kernel.active_sessions[token]["cwd"]
                 await websocket.send_json({"output": help_text, "user": authenticated_user, "cwd": cwd})
