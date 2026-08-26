@@ -1,5 +1,4 @@
 # ApexOS Hybrid Edition
-<img width="1366" height="609" alt="image" src="https://github.com/user-attachments/assets/e7f227ed-daa9-46b3-bb01-3a5e44fd4e61" />
 
 Virtual operating system in the browser — **decoupled core** + **HexaDE** desktop environment.
 

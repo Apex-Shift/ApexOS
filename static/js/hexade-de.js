@@ -367,8 +367,178 @@
   }
 
   function openExplorer() {
-    const { body } = createWindow("Files", "📁", 560, 400);
-    body.innerHTML = `<div style="padding:16px;color:#a0b0c0;font-size:13px">Use Terminal: <code>ls</code>, <code>cd</code>, <code>cat</code></div>`;
+    const { win, body } = createWindow("Files", "📁", 680, 460);
+    let expCwd = currentCwd || "/";
+    let selected = null;
+    body.innerHTML = `<div class="finder">
+      <div class="finder-toolbar">
+        <button id="f-up" title="Parent">⬆</button>
+        <button id="f-ref" title="Refresh">↻</button>
+        <div class="finder-path" id="f-path">/</div>
+        <button id="f-newfile" title="New file">📄+</button>
+        <button id="f-newdir" title="New folder">📁+</button>
+        <button id="f-open" title="Open" disabled>Open</button>
+        <button id="f-del" title="Delete" disabled>🗑</button>
+      </div>
+      <div class="finder-body">
+        <div class="finder-sidebar" id="f-side">
+          <div class="finder-side-item" data-p="/">🖥 Root</div>
+          <div class="finder-side-item" data-p="/home">🏠 Home</div>
+          <div class="finder-side-item" data-p="/root">📂 root</div>
+          <div class="finder-side-item" data-p="/home/apps">📦 Apps</div>
+          <div class="finder-side-item" data-p="/system">⚙️ System</div>
+        </div>
+        <div class="finder-grid" id="f-grid"></div>
+      </div>
+      <div class="finder-status" id="f-status">Ready</div>
+    </div>`;
+
+    const pathEl = $("#f-path", body);
+    const grid = $("#f-grid", body);
+    const status = $("#f-status", body);
+    const btnOpen = $("#f-open", body);
+    const btnDel = $("#f-del", body);
+
+    function setPath(p) {
+      expCwd = p || "/";
+      pathEl.textContent = expCwd;
+      $$(".finder-side-item", body).forEach((el) => {
+        el.classList.toggle("active", el.dataset.p === expCwd);
+      });
+    }
+
+    function parseListing(raw) {
+      raw = (raw || "").trim();
+      if (!raw || raw === "(empty directory)") return [];
+      if (raw.startsWith("ls:")) return { error: raw };
+      const items = [];
+      raw.split(/\s+/).filter(Boolean).forEach((tok) => {
+        const isDir = tok.startsWith("[") && tok.endsWith("/]");
+        const name = isDir ? tok.slice(1, -2) : tok;
+        if (name) items.push({ name, isDir });
+      });
+      return items;
+    }
+
+    function renderItems(items) {
+      selected = null;
+      btnOpen.disabled = true;
+      btnDel.disabled = true;
+      grid.innerHTML = "";
+      if (items.error) {
+        grid.innerHTML = `<div class="finder-empty" style="color:#ff6b6b">${items.error}</div>`;
+        status.textContent = "Error";
+        return;
+      }
+      if (!items.length) {
+        grid.innerHTML = `<div class="finder-empty">Empty folder — use 📁+ to create a directory</div>`;
+        status.textContent = "0 items";
+        return;
+      }
+      items.forEach((it) => {
+        const div = document.createElement("div");
+        div.className = "finder-item";
+        div.innerHTML = `<div class="fi-icon">${it.isDir ? "📁" : "📄"}</div><div class="fi-name">${it.name}</div>`;
+        div.onclick = (e) => {
+          e.stopPropagation();
+          grid.querySelectorAll(".finder-item").forEach((x) => x.classList.remove("selected"));
+          div.classList.add("selected");
+          selected = it;
+          btnOpen.disabled = false;
+          btnDel.disabled = false;
+        };
+        div.ondblclick = () => openItem(it);
+        grid.appendChild(div);
+      });
+      status.textContent = items.length + " item(s) — " + expCwd;
+    }
+
+    function openItem(it) {
+      if (!it) return;
+      if (it.isDir) {
+        const next = expCwd === "/" ? "/" + it.name : expCwd.replace(/\/$/, "") + "/" + it.name;
+        navigate(next);
+      } else {
+        const full = expCwd === "/" ? "/" + it.name : expCwd.replace(/\/$/, "") + "/" + it.name;
+        openEditor({ filename: full });
+      }
+    }
+
+    function navigate(path) {
+      setPath(path);
+      status.textContent = "Loading…";
+      grid.innerHTML = `<div class="finder-empty">Loading…</div>`;
+      let phase = 0;
+      const unsub = H.onMessage((d) => {
+        if (d.output === undefined && !d.cwd) return;
+        if (phase === 0) {
+          phase = 1;
+          if (d.cwd) setPath(d.cwd);
+          H.sendCmd("ls");
+          return;
+        }
+        renderItems(parseListing(d.output));
+        unsub();
+      });
+      H.sendCmd("cd " + path);
+    }
+
+    function waitOutput(cmd, cb) {
+      const unsub = H.onMessage((d) => {
+        if (d.output !== undefined) {
+          unsub();
+          cb(d.output || "", d);
+        }
+      });
+      H.sendCmd(cmd);
+    }
+
+    $("#f-up", body).onclick = () => {
+      if (expCwd === "/") return;
+      const parts = expCwd.split("/").filter(Boolean);
+      parts.pop();
+      navigate("/" + parts.join("/") || "/");
+    };
+    $("#f-ref", body).onclick = () => navigate(expCwd);
+    $("#f-open", body).onclick = () => openItem(selected);
+    $("#f-del", body).onclick = () => {
+      if (!selected) return;
+      if (!confirm("Delete « " + selected.name + " » ?")) return;
+      const full = expCwd === "/" ? "/" + selected.name : expCwd.replace(/\/$/, "") + "/" + selected.name;
+      waitOutput("rm " + full, (out) => {
+        status.textContent = out;
+        navigate(expCwd);
+      });
+    };
+    $("#f-newdir", body).onclick = () => {
+      const name = prompt("New folder name:");
+      if (!name || !name.trim()) return;
+      const full = expCwd === "/" ? "/" + name.trim() : expCwd.replace(/\/$/, "") + "/" + name.trim();
+      waitOutput("mkdir " + full, (out) => {
+        status.textContent = out;
+        navigate(expCwd);
+      });
+    };
+    $("#f-newfile", body).onclick = () => {
+      const name = prompt("New file name:");
+      if (!name || !name.trim()) return;
+      const full = expCwd === "/" ? "/" + name.trim() : expCwd.replace(/\/$/, "") + "/" + name.trim();
+      waitOutput("touch " + full, (out) => {
+        status.textContent = out;
+        navigate(expCwd);
+      });
+    };
+    $$(".finder-side-item", body).forEach((el) => {
+      el.onclick = () => navigate(el.dataset.p);
+    });
+    grid.onclick = () => {
+      grid.querySelectorAll(".finder-item").forEach((x) => x.classList.remove("selected"));
+      selected = null;
+      btnOpen.disabled = true;
+      btnDel.disabled = true;
+    };
+
+    navigate(expCwd);
   }
 
   function openCalculator() {
@@ -376,9 +546,36 @@
     body.innerHTML = `<div style="padding:16px"><input id="cdisp" value="0" style="width:100%;font-size:24px;padding:8px;background:#0a0f14;border:none;color:#11ff55;text-align:right"></div>`;
   }
 
-  function openEditor() {
-    const { body } = createWindow("Editor", "📝", 640, 420);
-    body.innerHTML = `<textarea style="width:100%;height:100%;background:#0d1219;border:none;color:#e0e6ed;padding:12px;font-family:monospace" placeholder="Notes…"></textarea>`;
+  function openEditor(opts = {}) {
+    const fn = opts.filename || "untitled.txt";
+    const { win, body } = createWindow("Editor — " + fn, "📝", 640, 460);
+    body.innerHTML = `<div style="height:100%;display:flex;flex-direction:column">
+      <div style="padding:8px;background:#151e2c;display:flex;gap:6px;align-items:center">
+        <input id="ed-path" value="${fn.replace(/"/g, "&quot;")}" style="flex:1;background:#0a1018;border:1px solid rgba(255,255,255,.09);border-radius:6px;padding:6px 10px;color:#c5d0dc;font-size:13px">
+        <button class="btn" id="ed-save">Save</button>
+        <button class="btn secondary" id="ed-reload">Reload</button>
+      </div>
+      <textarea id="ed-ta" spellcheck="false" style="flex:1;background:#0d1219;border:none;outline:none;color:#e0e6ed;font-family:Consolas,monospace;font-size:13px;padding:12px;resize:none" placeholder="Start typing…"></textarea>
+    </div>`;
+    const ta = $("#ed-ta", body);
+    const pathIn = $("#ed-path", body);
+    function loadPath(p) {
+      if (!p || p === "untitled.txt") { ta.value = ""; return; }
+      const unsub = H.onMessage((d) => {
+        if (d.output !== undefined) {
+          ta.value = (d.output || "").startsWith("cat:") ? "" : d.output;
+          unsub();
+        }
+      });
+      H.sendCmd("cat " + p);
+    }
+    $("#ed-save", body).onclick = () => {
+      const p = pathIn.value.trim() || "untitled.txt";
+      H.sendWrite(p, ta.value);
+      $(".title", win).textContent = "📝 Editor — " + p;
+    };
+    $("#ed-reload", body).onclick = () => loadPath(pathIn.value.trim());
+    loadPath(fn);
   }
 
   function openBrowser() {
